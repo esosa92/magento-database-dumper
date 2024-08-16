@@ -1,0 +1,6 @@
+[
+  {
+    "env_path": "/opt/webscale/hosting/secrets/staging.powermusic.com/env.php",
+    "ssh_host": "pown_stg_nfs"
+  }
+]

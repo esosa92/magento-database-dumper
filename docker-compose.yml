@@ -1,0 +1,13 @@
+services:
+    go:
+        image: golang:1.23-bullseye
+        container_name: magento_db_dumper
+        entrypoint: /entrypoint.sh
+        tty: true
+        volumes:
+            - ./entrypoint.sh:/entrypoint.sh
+            - ./src:/go/src
+            - ./pkg:/go/pkg
+            - ./bin:/go/bin
+            - ./sdk:/sdk
+            - /home/emiliano/.ssh:/root/.ssh
