@@ -1,188 +1,188 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"github.com/charmbracelet/lipgloss"
-	"io"
-	"os"
-	"os/exec"
-	"path"
-	"strings"
+    "bytes"
+    "encoding/json"
+    "fmt"
+    "github.com/charmbracelet/lipgloss"
+    "io"
+    "os"
+    "os/exec"
+    "path"
+    "strings"
 )
 
 type Connection struct {
-	Remote_env_path            string `json:"remote_env_path"`
-	Ssh_host                   string `json:"ssh_host"`
-	Ssh_pass                   string `json:"ssh_pass"`
-	Enabled                    bool   `json:"enabled"`
-	Local_path                 string `json:"local_path"`
-	Enable_set_gtid_purged_off bool   `json:"enable_set_gtid_purged_off"`
-	Id                         string `json:"id"`
+    Remote_env_path            string `json:"remote_env_path"`
+    Ssh_host                   string `json:"ssh_host"`
+    Ssh_pass                   string `json:"ssh_pass"`
+    Enabled                    bool   `json:"enabled"`
+    Local_path                 string `json:"local_path"`
+    Enable_set_gtid_purged_off bool   `json:"enable_set_gtid_purged_off"`
+    Id                         string `json:"id"`
 }
 
 func main() {
-	file, err := os.ReadFile("dump.json")
-	if err != nil {
-		fmt.Printf("File error: %v\n", err)
-	}
+    file, err := os.ReadFile("dump.json")
+    if err != nil {
+        fmt.Printf("File error: %v\n", err)
+    }
 
-	var config_id string
-	if len(os.Args) > 1 {
-		config_id = os.Args[1]
-	}
+    var config_id string
+    if len(os.Args) > 1 {
+        config_id = os.Args[1]
+    }
 
-	var ConnectionItems []Connection
+    var ConnectionItems []Connection
 
-	err = json.Unmarshal(file, &ConnectionItems)
-	if err != nil {
-		fmt.Printf("File error: %v\n", err)
-	}
+    err = json.Unmarshal(file, &ConnectionItems)
+    if err != nil {
+        fmt.Printf("File error: %v\n", err)
+    }
 
-	if len(ConnectionItems) == 0 {
-		fmt.Println("No connection items found")
-	}
+    if len(ConnectionItems) == 0 {
+        fmt.Println("No connection items found")
+    }
 
-	infoRender := lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
-	skipRender := lipgloss.NewStyle().Foreground(lipgloss.Color("99"))
-	errorRenderer := lipgloss.NewStyle().Foreground(lipgloss.Color("124"))
-	count := 0
-	for _, item := range ConnectionItems {
-		if config_id != "" && strings.ToLower(config_id) != strings.ToLower(item.Id) {
-			continue
-		}
-		count++
-		fmt.Println("Found config with Id: ", item.Id)
+    infoRender := lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
+    skipRender := lipgloss.NewStyle().Foreground(lipgloss.Color("99"))
+    errorRenderer := lipgloss.NewStyle().Foreground(lipgloss.Color("124"))
+    count := 0
+    for _, item := range ConnectionItems {
+        if config_id != "" && strings.ToLower(config_id) != strings.ToLower(item.Id) {
+            continue
+        }
+        count++
+        fmt.Println("Found config with Id: ", item.Id)
 
-		var should_skip bool
-		if item.Remote_env_path == "" {
-			should_skip = true
-			fmt.Println(errorRenderer.Render("No remote_env_path found have to skip"))
-		}
+        var should_skip bool
+        if item.Remote_env_path == "" {
+            should_skip = true
+            fmt.Println(errorRenderer.Render("No remote_env_path found have to skip"))
+        }
 
-		if item.Ssh_host == "" {
-			should_skip = true
-			fmt.Println(errorRenderer.Render("No ssh_host found have to skip"))
-		}
+        if item.Ssh_host == "" {
+            should_skip = true
+            fmt.Println(errorRenderer.Render("No ssh_host found have to skip"))
+        }
 
-		fmt.Println(fmt.Sprintf("Will connect to: %s", infoRender.Render(item.Ssh_host)))
-		fmt.Println(fmt.Sprintf("Magento env.php abs location in server is: %s", infoRender.Render(item.Remote_env_path)))
+        fmt.Println(fmt.Sprintf("Will connect to: %s", infoRender.Render(item.Ssh_host)))
+        fmt.Println(fmt.Sprintf("Magento env.php abs location in server is: %s", infoRender.Render(item.Remote_env_path)))
 
-		if item.Enabled == false || should_skip == true {
-			fmt.Println(skipRender.Render("Configuration is Disabled Skiping..."))
-			fmt.Println(skipRender.Render("#####"))
-			fmt.Println(skipRender.Render("####"))
-			fmt.Println(skipRender.Render("###"))
-			fmt.Println(skipRender.Render("##"))
-			fmt.Println(skipRender.Render("#"))
-			continue
-		}
+        if item.Enabled == false || should_skip == true {
+            fmt.Println(skipRender.Render("Configuration is Disabled Skiping..."))
+            fmt.Println(skipRender.Render("#####"))
+            fmt.Println(skipRender.Render("####"))
+            fmt.Println(skipRender.Render("###"))
+            fmt.Println(skipRender.Render("##"))
+            fmt.Println(skipRender.Render("#"))
+            continue
+        }
 
-		if item.Local_path == "" {
-			item.Local_path = "./"
-		}
+        if item.Local_path == "" {
+            item.Local_path = "./"
+        }
 
-		filename, err := connectAndGenerateDump2(&item)
+        filename, err := connectAndGenerateDump2(&item)
 
-		if err != nil {
-			fmt.Printf("Error: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Println("File name: " + filename)
-		_ = scpFile(&item, filename)
-	}
+        if err != nil {
+            fmt.Printf("Error: %v\n", err)
+            os.Exit(1)
+        }
+        fmt.Println("File name: " + filename)
+        _ = scpFile(&item, filename)
+    }
 
-	if config_id != "" && count == 0 {
-		fmt.Println(fmt.Sprintf("No connection items with id %s found", config_id))
-	}
+    if config_id != "" && count == 0 {
+        fmt.Println(fmt.Sprintf("No connection items with id %s found", config_id))
+    }
 }
 
 func connectAndGenerateDump2(item *Connection) (string, error) {
 
-	var cmd *exec.Cmd
-	if item.Ssh_pass == "" {
-		cmd = exec.Command("ssh", item.Ssh_host, "/bin/bash", "-s")
-	} else {
-		cmd = exec.Command("sshpass", "-e", "ssh", item.Ssh_host, "/bin/bash", "-s")
-		cmd.Env = append(os.Environ(), fmt.Sprintf("SSHPASS=%s", item.Ssh_pass))
-	}
+    var cmd *exec.Cmd
+    if item.Ssh_pass == "" {
+        cmd = exec.Command("ssh", item.Ssh_host, "/bin/bash", "-s")
+    } else {
+        cmd = exec.Command("sshpass", "-e", "ssh", item.Ssh_host, "/bin/bash", "-s")
+        cmd.Env = append(os.Environ(), fmt.Sprintf("SSHPASS=%s", item.Ssh_pass))
+    }
 
-	// Print the command string
-	// cmd := exec.Command("ssh", "-v", ssh_host, "whoami && pwd && echo $PATH")
-	var sent_db_dump_bash_script string
-	if item.Enable_set_gtid_purged_off {
-		sent_db_dump_bash_script = strings.ReplaceAll(generate_db_dump_bash_script, "__add__purge__id__off__option__", "--set-gtid-purged=OFF")
-	} else {
-		sent_db_dump_bash_script = strings.ReplaceAll(generate_db_dump_bash_script, "__add__purge__id__off__option__", "")
-	}
+    // Print the command string
+    // cmd := exec.Command("ssh", "-v", ssh_host, "whoami && pwd && echo $PATH")
+    var sent_db_dump_bash_script string
+    if item.Enable_set_gtid_purged_off {
+        sent_db_dump_bash_script = strings.ReplaceAll(generate_db_dump_bash_script, "__add__purge__id__off__option__", "--set-gtid-purged=OFF")
+    } else {
+        sent_db_dump_bash_script = strings.ReplaceAll(generate_db_dump_bash_script, "__add__purge__id__off__option__", "")
+    }
 
-	cmd.Stdin = strings.NewReader(sent_db_dump_bash_script)
-	cmd.Args = append(cmd.Args, item.Remote_env_path)
+    cmd.Stdin = strings.NewReader(sent_db_dump_bash_script)
+    cmd.Args = append(cmd.Args, item.Remote_env_path)
 
-	cmd_string := cmd.Path + " " + strings.Join(cmd.Args[1:], " ")
-	//fmt.Println("Environment Variables", cmd.Env)
-	fmt.Println("Command to be executed:", cmd_string)
+    cmd_string := cmd.Path + " " + strings.Join(cmd.Args[1:], " ")
+    //fmt.Println("Environment Variables", cmd.Env)
+    fmt.Println("Command to be executed:", cmd_string)
 
-	// Create a buffer to capture stdout
-	var stdout_buffer bytes.Buffer
-	// Create a MultiWriter that writes to both os.Stdout and the buffer
-	cmd.Stdout = io.MultiWriter(os.Stdout, &stdout_buffer)
-	cmd.Stderr = os.Stderr // Continue to show stderr in real-time
+    // Create a buffer to capture stdout
+    var stdout_buffer bytes.Buffer
+    // Create a MultiWriter that writes to both os.Stdout and the buffer
+    cmd.Stdout = io.MultiWriter(os.Stdout, &stdout_buffer)
+    cmd.Stderr = os.Stderr // Continue to show stderr in real-time
 
-	// Run the command
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("SSH command finished with error: %v", err)
-	}
+    // Run the command
+    if err := cmd.Run(); err != nil {
+        return "", fmt.Errorf("SSH command finished with error: %v", err)
+    }
 
-	// Convert stdout to a string and find the filename
-	output := stdout_buffer.String()
-	//fmt.Println("Command output captured:", output)
+    // Convert stdout to a string and find the filename
+    output := stdout_buffer.String()
+    //fmt.Println("Command output captured:", output)
 
-	// Assuming the filename is on the last line of the output
-	var filename string
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "Generated filename:") {
-			filename = strings.TrimSpace(strings.TrimPrefix(line, "Generated filename:"))
-		}
-	}
+    // Assuming the filename is on the last line of the output
+    var filename string
+    lines := strings.Split(output, "\n")
+    for _, line := range lines {
+        if strings.HasPrefix(strings.TrimSpace(line), "Generated filename:") {
+            filename = strings.TrimSpace(strings.TrimPrefix(line, "Generated filename:"))
+        }
+    }
 
-	if filename == "" {
-		return "", fmt.Errorf("failed to capture the generated filename")
-	}
+    if filename == "" {
+        return "", fmt.Errorf("failed to capture the generated filename")
+    }
 
-	return filename, nil
+    return filename, nil
 }
 
 func scpFile(item *Connection, filename string) error {
-	fmt.Println("Starting SCP transfer...")
-	var cmd *exec.Cmd
+    fmt.Println("Starting SCP transfer...")
+    var cmd *exec.Cmd
 
-	local_path := path.Join(item.Local_path, path.Base(filename))
-	if item.Ssh_pass != "" {
-		cmd = exec.Command("sshpass", "-e", "scp", fmt.Sprintf("%s:%s", item.Ssh_host, filename), local_path)
-		cmd.Env = append(os.Environ(), fmt.Sprintf("SSHPASS=%s", item.Ssh_pass))
-	} else {
-		cmd = exec.Command("scp", fmt.Sprintf("%s:%s", item.Ssh_host, filename), local_path)
-	}
+    local_path := path.Join(item.Local_path, path.Base(filename))
+    if item.Ssh_pass != "" {
+        cmd = exec.Command("sshpass", "-e", "scp", fmt.Sprintf("%s:%s", item.Ssh_host, filename), local_path)
+        cmd.Env = append(os.Environ(), fmt.Sprintf("SSHPASS=%s", item.Ssh_pass))
+    } else {
+        cmd = exec.Command("scp", fmt.Sprintf("%s:%s", item.Ssh_host, filename), local_path)
+    }
 
-	cmdString := cmd.Path + " " + strings.Join(cmd.Args[1:], " ")
-	//fmt.Println("Environment Variables", cmd.Env)
-	fmt.Println("Command to be executed:", cmdString)
+    cmdString := cmd.Path + " " + strings.Join(cmd.Args[1:], " ")
+    //fmt.Println("Environment Variables", cmd.Env)
+    fmt.Println("Command to be executed:", cmdString)
 
-	// Set the command's stdout and stderr to the process's stdout and stderr
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+    // Set the command's stdout and stderr to the process's stdout and stderr
+    cmd.Stdout = os.Stdout
+    cmd.Stderr = os.Stderr
 
-	// Run the command
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("SCP command finished with error: %v", err)
-	}
+    // Run the command
+    if err := cmd.Run(); err != nil {
+        return fmt.Errorf("SCP command finished with error: %v", err)
+    }
 
-	fmt.Println("SCP transfer completed successfully")
+    fmt.Println("SCP transfer completed successfully")
 
-	return nil
+    return nil
 }
 
 var generate_db_dump_bash_script = `
