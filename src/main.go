@@ -203,7 +203,7 @@ DP="$(grep "[\']db[\']" -A 20 "$ENV_PHP_PATH" | grep "password" | head -n1 | sed
 #echo $DN $DH $DU $DP
 echo "Starting dump file generation"
 filename="/tmp/db.$DN.$(date +"%d-%m-%y_%H.%M.%S").$((1 + $RANDOM % 100000)).sql.gz"
-mysqldump -h$DH -u$DU -p$DP $DN --single-transaction __add__purge__id__off__option__ | sed -e 's/DEFINER[ ]*=[ ]*[^*]*\*/\*/' | pv | gzip >"$filename"
+mysqldump -h$DH -u$DU -p$DP $DN --single-transaction __add__purge__id__off__option__ | sed -e 's/DEFINER[ ]*=[ ]*[^*]*\*/\*/' | gzip >"$filename"
 echo "Finished dump file generation"
 echo "Generated filename: $filename"
 `
