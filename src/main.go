@@ -19,12 +19,18 @@ type Connection struct {
 	Enabled                    bool   `json:"enabled"`
 	Local_path                 string `json:"local_path"`
 	Enable_set_gtid_purged_off bool   `json:"enable_set_gtid_purged_off"`
+	Id                         string `json:"id"`
 }
 
 func main() {
 	file, err := os.ReadFile("dump.json")
 	if err != nil {
 		fmt.Printf("File error: %v\n", err)
+	}
+
+	var config_id string
+	if len(os.Args) > 1 {
+		config_id = os.Args[1]
 	}
 
 	var ConnectionItems []Connection
@@ -41,7 +47,14 @@ func main() {
 	infoRender := lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
 	skipRender := lipgloss.NewStyle().Foreground(lipgloss.Color("99"))
 	errorRenderer := lipgloss.NewStyle().Foreground(lipgloss.Color("124"))
+	count := 0
 	for _, item := range ConnectionItems {
+		if config_id != "" && strings.ToLower(config_id) != strings.ToLower(item.Id) {
+			continue
+		}
+		count++
+		fmt.Println("Found config with Id: ", item.Id)
+
 		var should_skip bool
 		if item.Remote_env_path == "" {
 			should_skip = true
@@ -78,6 +91,10 @@ func main() {
 		}
 		fmt.Println("File name: " + filename)
 		_ = scpFile(&item, filename)
+	}
+
+	if config_id != "" && count == 0 {
+		fmt.Println(fmt.Sprintf("No connection items with id %s found", config_id))
 	}
 }
 

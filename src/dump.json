@@ -4,7 +4,8 @@
     "ssh_host": "pown_stg_nfs",
     "local_path": "/home/emiliano/workspace/121DockerFiles/docker-stacks/pown/dbscripts",
     "enabled": false,
-    "enable_set_gtid_purged_off": true
+    "enable_set_gtid_purged_off": true,
+    "id": "LaCabra"
   },
   {
     "remote_env_path": "/chroot/home/a32c6376/c050a0b5c7.nxcli.io/app/etc/env.php",
