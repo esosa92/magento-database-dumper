@@ -1,169 +1,174 @@
 package main
 
 import (
-    "bufio"
-    "bytes"
-    "encoding/json"
-    "fmt"
-    "io"
-    "os"
-    "os/exec"
-    "strings"
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"github.com/charmbracelet/lipgloss"
+	"io"
+	"os"
+	"os/exec"
+	"path"
+	"strings"
 )
 
 type Connection struct {
-    Env_path string `json:"env_path"`
-    Ssh_host string `json:"ssh_host"`
+	Remote_env_path            string `json:"remote_env_path"`
+	Ssh_host                   string `json:"ssh_host"`
+	Ssh_pass                   string `json:"ssh_pass"`
+	Enabled                    bool   `json:"enabled"`
+	Local_path                 string `json:"local_path"`
+	Enable_set_gtid_purged_off bool   `json:"enable_set_gtid_purged_off"`
 }
 
 func main() {
-    file, err := os.ReadFile("dump.json")
-    if err != nil {
-        fmt.Printf("File error: %v\n", err)
-    }
+	file, err := os.ReadFile("dump.json")
+	if err != nil {
+		fmt.Printf("File error: %v\n", err)
+	}
 
-    var ConnectionItems []Connection
+	var ConnectionItems []Connection
 
-    err = json.Unmarshal(file, &ConnectionItems)
-    if err != nil {
-        fmt.Printf("File error: %v\n", err)
-    }
+	err = json.Unmarshal(file, &ConnectionItems)
+	if err != nil {
+		fmt.Printf("File error: %v\n", err)
+	}
 
-    if len(ConnectionItems) == 0 {
-        fmt.Println("No connection items found")
-    }
+	if len(ConnectionItems) == 0 {
+		fmt.Println("No connection items found")
+	}
 
-    for _, item := range ConnectionItems {
-        fmt.Printf("Connecting to %s\n", item.Ssh_host)
-        fmt.Printf("EnvPath location in server is %s\n", item.Env_path)
-        filename, err := connectAndGenerateDump2(item.Env_path, item.Ssh_host)
-        if err != nil {
-            fmt.Printf("Error: %v\n", err)
-            os.Exit(1)
-        }
-        fmt.Println("File name: " + filename)
-        _ = scpFile(item.Ssh_host, filename)
-    }
+	infoRender := lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
+	skipRender := lipgloss.NewStyle().Foreground(lipgloss.Color("99"))
+	errorRenderer := lipgloss.NewStyle().Foreground(lipgloss.Color("124"))
+	for _, item := range ConnectionItems {
+		var should_skip bool
+		if item.Remote_env_path == "" {
+			should_skip = true
+			fmt.Println(errorRenderer.Render("No remote_env_path found have to skip"))
+		}
+
+		if item.Ssh_host == "" {
+			should_skip = true
+			fmt.Println(errorRenderer.Render("No ssh_host found have to skip"))
+		}
+
+		fmt.Println(fmt.Sprintf("Will connect to: %s", infoRender.Render(item.Ssh_host)))
+		fmt.Println(fmt.Sprintf("Magento env.php abs location in server is: %s", infoRender.Render(item.Remote_env_path)))
+
+		if item.Enabled == false || should_skip == true {
+			fmt.Println(skipRender.Render("Configuration is Disabled Skiping..."))
+			fmt.Println(skipRender.Render("#####"))
+			fmt.Println(skipRender.Render("####"))
+			fmt.Println(skipRender.Render("###"))
+			fmt.Println(skipRender.Render("##"))
+			fmt.Println(skipRender.Render("#"))
+			continue
+		}
+
+		if item.Local_path == "" {
+			item.Local_path = "./"
+		}
+
+		filename, err := connectAndGenerateDump2(&item)
+
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("File name: " + filename)
+		_ = scpFile(&item, filename)
+	}
 }
 
-func connectAndGenerateDump2(env_path, ssh_host string) (string, error) {
-    cmd := exec.Command("ssh", ssh_host, "/bin/bash", "-s")
-    // cmd := exec.Command("ssh", "-v", ssh_host, "whoami && pwd && echo $PATH")
-    cmd.Stdin = strings.NewReader(generateDbDumpBashScript)
-    cmd.Args = append(cmd.Args, env_path)
+func connectAndGenerateDump2(item *Connection) (string, error) {
 
-    fmt.Println("Starting generation of dump file, this may take a few minutes...")
+	var cmd *exec.Cmd
+	if item.Ssh_pass == "" {
+		cmd = exec.Command("ssh", item.Ssh_host, "/bin/bash", "-s")
+	} else {
+		cmd = exec.Command("sshpass", "-e", "ssh", item.Ssh_host, "/bin/bash", "-s")
+		cmd.Env = append(os.Environ(), fmt.Sprintf("SSHPASS=%s", item.Ssh_pass))
+	}
 
-    // Create a buffer to capture stdout
-    var stdoutBuf bytes.Buffer
-    // Create a MultiWriter that writes to both os.Stdout and the buffer
-    cmd.Stdout = io.MultiWriter(os.Stdout, &stdoutBuf)
-    cmd.Stderr = os.Stderr // Continue to show stderr in real-time
+	// Print the command string
+	// cmd := exec.Command("ssh", "-v", ssh_host, "whoami && pwd && echo $PATH")
+	var sent_db_dump_bash_script string
+	if item.Enable_set_gtid_purged_off {
+		sent_db_dump_bash_script = strings.ReplaceAll(generate_db_dump_bash_script, "__add__purge__id__off__option__", "--set-gtid-purged=OFF")
+	} else {
+		sent_db_dump_bash_script = strings.ReplaceAll(generate_db_dump_bash_script, "__add__purge__id__off__option__", "")
+	}
 
-    // Run the command
-    if err := cmd.Run(); err != nil {
-        return "", fmt.Errorf("SCP command finished with error: %v", err)
-    }
+	cmd.Stdin = strings.NewReader(sent_db_dump_bash_script)
+	cmd.Args = append(cmd.Args, item.Remote_env_path)
 
-    // Convert stdout to a string and find the filename
-    output := stdoutBuf.String()
-    //fmt.Println("Command output captured:", output)
+	cmd_string := cmd.Path + " " + strings.Join(cmd.Args[1:], " ")
+	//fmt.Println("Environment Variables", cmd.Env)
+	fmt.Println("Command to be executed:", cmd_string)
 
-    // Assuming the filename is on the last line of the output
-    var filename string
-    lines := strings.Split(output, "\n")
-    for _, line := range lines {
-        if strings.HasPrefix(strings.TrimSpace(line), "Generated filename:") {
-            filename = strings.TrimSpace(strings.TrimPrefix(line, "Generated filename:"))
-        }
-    }
+	// Create a buffer to capture stdout
+	var stdout_buffer bytes.Buffer
+	// Create a MultiWriter that writes to both os.Stdout and the buffer
+	cmd.Stdout = io.MultiWriter(os.Stdout, &stdout_buffer)
+	cmd.Stderr = os.Stderr // Continue to show stderr in real-time
 
-    if filename == "" {
-        return "", fmt.Errorf("failed to capture the generated filename")
-    }
+	// Run the command
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("SSH command finished with error: %v", err)
+	}
 
-    return filename, nil
+	// Convert stdout to a string and find the filename
+	output := stdout_buffer.String()
+	//fmt.Println("Command output captured:", output)
+
+	// Assuming the filename is on the last line of the output
+	var filename string
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "Generated filename:") {
+			filename = strings.TrimSpace(strings.TrimPrefix(line, "Generated filename:"))
+		}
+	}
+
+	if filename == "" {
+		return "", fmt.Errorf("failed to capture the generated filename")
+	}
+
+	return filename, nil
 }
 
-func connectAndGenerateDump(env_path, ssh_host string) (string, error) {
-    cmd := exec.Command("ssh", ssh_host, "/bin/bash", "-s")
-    //cmd := exec.Command("ssh", "-v", ssh_host, "whoami && pwd && echo $PATH")
-    cmd.Stdin = strings.NewReader(generateDbDumpBashScript)
-    cmd.Args = append(cmd.Args, env_path)
+func scpFile(item *Connection, filename string) error {
+	fmt.Println("Starting SCP transfer...")
+	var cmd *exec.Cmd
 
-    fmt.Println("Starting generation of dump file, this may take a few minutes...")
+	local_path := path.Join(item.Local_path, path.Base(filename))
+	if item.Ssh_pass != "" {
+		cmd = exec.Command("sshpass", "-e", "scp", fmt.Sprintf("%s:%s", item.Ssh_host, filename), local_path)
+		cmd.Env = append(os.Environ(), fmt.Sprintf("SSHPASS=%s", item.Ssh_pass))
+	} else {
+		cmd = exec.Command("scp", fmt.Sprintf("%s:%s", item.Ssh_host, filename), local_path)
+	}
 
-    stdout, err := cmd.StdoutPipe()
-    if err != nil {
-        return "", fmt.Errorf("error creating StdoutPipe: %v", err)
-    }
-    stderr, err := cmd.StderrPipe()
-    if err != nil {
-        return "", fmt.Errorf("error creating StderrPipe: %v", err)
-    }
+	cmdString := cmd.Path + " " + strings.Join(cmd.Args[1:], " ")
+	//fmt.Println("Environment Variables", cmd.Env)
+	fmt.Println("Command to be executed:", cmdString)
 
-    // Start the command
-    if err := cmd.Start(); err != nil {
-        return "", fmt.Errorf("error starting command: %v", err)
-    }
+	// Set the command's stdout and stderr to the process's stdout and stderr
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
-    var filename string
+	// Run the command
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("SCP command finished with error: %v", err)
+	}
 
-    // Print output in real-time
-    go func() {
-        scanner := bufio.NewScanner(stdout)
-        for scanner.Scan() {
-            line := scanner.Text()
-            fmt.Println("stdout:", line)
-            if strings.HasPrefix(line, "Generated filename:") {
-                filename = strings.TrimSpace(strings.TrimPrefix(line, "Generated filename:"))
-            }
-        }
-    }()
+	fmt.Println("SCP transfer completed successfully")
 
-    go func() {
-        scanner := bufio.NewScanner(stderr)
-        for scanner.Scan() {
-            fmt.Println("stderr:", scanner.Text())
-        }
-    }()
-
-    // Wait for the command to finish
-    if err := cmd.Wait(); err != nil {
-        return "", fmt.Errorf("command finished with error: %v", err)
-    }
-
-    // Check if the filename was captured
-    if filename == "" {
-        return "", fmt.Errorf("failed to capture the generated filename")
-    }
-
-    fmt.Printf("Dump file generated: %s\n", filename)
-
-    return filename, nil
+	return nil
 }
 
-func scpFile(ssh_host, filename string) error {
-    fmt.Println("Starting SCP transfer...")
-
-    // Create the SCP command with the verbose flag
-    cmd := exec.Command("scp", fmt.Sprintf("%s:%s", ssh_host, filename), "./")
-
-    // Set the command's stdout and stderr to the process's stdout and stderr
-    cmd.Stdout = os.Stdout
-    cmd.Stderr = os.Stderr
-
-    // Run the command
-    if err := cmd.Run(); err != nil {
-        return fmt.Errorf("SCP command finished with error: %v", err)
-    }
-
-    fmt.Println("SCP transfer completed successfully")
-
-    return nil
-}
-
-var generateDbDumpBashScript = `
+var generate_db_dump_bash_script = `
 #!/bin/bash
 
 ENV_PHP_PATH=$1
@@ -179,8 +184,9 @@ DU="$(grep "[\']db[\']" -A 20 "$ENV_PHP_PATH" | grep "username" | head -n1 | sed
 DP="$(grep "[\']db[\']" -A 20 "$ENV_PHP_PATH" | grep "password" | head -n1 | sed "s/.*[=][>][ ]*[']//" | sed "s/[']$//" | sed "s/['][,]//")"
 
 #echo $DN $DH $DU $DP
-
+echo "Starting dump file generation"
 filename="/tmp/db.$DN.$(date +"%d-%m-%y_%H.%M.%S").$((1 + $RANDOM % 100000)).sql.gz"
-mysqldump -h$DH -u$DU -p$DP $DN --single-transaction --set-gtid-purged=OFF | sed -e 's/DEFINER[ ]*=[ ]*[^*]*\*/\*/' | pv | gzip >"$filename"
+mysqldump -h$DH -u$DU -p$DP $DN --single-transaction __add__purge__id__off__option__ | sed -e 's/DEFINER[ ]*=[ ]*[^*]*\*/\*/' | pv | gzip >"$filename"
+echo "Finished dump file generation"
 echo "Generated filename: $filename"
 `
