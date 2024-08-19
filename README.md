@@ -2,7 +2,7 @@
 
 With this utility you can configure connection information and magento env.php file absolute path. The tool will cycle through the configs and download automatically or you can send it an specific configuration id to download.
 
-The precompiled binary is part of the repository. You can ofc download and compile yourself.
+The precompiled binary is part of the repository. You can of course clone and compile yourself. The binary is magento-db-dumper.
 
 ## How it works
 
