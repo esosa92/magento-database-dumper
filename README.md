@@ -27,8 +27,8 @@ After you get the binary the program tries to search a file name **dump.json** i
     }
 ]
 ```
-- **remove_env_path**: This option is required. Here you set up where the env file is located in the remote server. It can work with relative or absolute. I would recommend an absolute path
-- **ssh_host**: This option is required. Here you can put a host that you have configured in .ssh/config file or a user and host(user@examplehost.com or user@192.36.21.50)
+- **remove_env_path**: This option is required. Here you set up where the env file is located in the remote server. It can work with relative or absolute. I would recommend an absolute path.
+- **ssh_host**: This option is required. Here you can put a host that you have configured in .ssh/config file or a user and host(user@examplehost.com or user@192.36.21.50).
 - **local_path**: This is optional if you don't specify anything the program will attempt to download where it was executed. Otherwise it will try to use the path you put here. The path should be a directory and it must exist. It is recommended it is absolute.
 - **enabled**: By default is false. If you want this config to work you have to set it to enabled: true. When this config is present with false or not present the configuration will be ignored.
 - **enable_set_gtid_purged_off**: sometimes you need this to be present when dumping. In those cases that you want this option to be present you must add the option and set it to "true".
