@@ -33,9 +33,9 @@ After you get the binary the program tries to search a file name **dump.json** i
 - **enabled**: By default is false. If you want this config to work you have to set it to enabled: true. When this config is present with false or not present the configuration will be ignored.
 - **enable_set_gtid_purged_off**: sometimes you need this to be present when dumping. In those cases that you want this option to be present you must add the option and set it to "true".
 - **ssh_pass**: If you set up this option it will attempt to use the program sshpass. With this program you can effectively add the connection password and not need to be paying attention to the password prompting. If you don't set this up, and you have a server which requires an ssh password because it has auth keys disabled, then  you will need to put the password twice. One for the connection and dumping another for the scping and download of the db_dump file.
-- **id**: This is an optional custom string and it is used for sending the command the only parameter it accepts which is an id. It is case-insensitive. You can put the same ID for multiple configs and all of those will be attempted to be downloaded. 
+- **id**: This is an optional custom string, and it is used for sending the command the only parameter it accepts which is an id. It is case-insensitive. You can put the same ID for multiple configs and all of those will be attempted to be downloaded. 
 
-To run this where you have the binary then you execute the binary and you can pass the optional **id** parameter. If you pass an id it will attempt to download all the configs that have that ID. If you don't send any ID it will attempt to dump all projects that you have configured. For both things enabled must set to "true".
+To run this where you have the binary then you execute the binary, and you can pass the optional **id** parameter. If you pass an id it will attempt to download all the configs that have that ID. If you don't send any ID it will attempt to dump all projects that you have configured. For both things enabled must set to "true".
 
 The filename is automatically generated via:
 
