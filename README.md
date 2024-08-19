@@ -37,10 +37,13 @@ After you get the binary the program tries to search a file name **dump.json** i
 
 To run this where you have the binary then you execute the binary and you can pass the optional **id** parameter. If you pass an id it will attempt to download all the configs that have that ID. If you don't send any ID it will attempt to dump all projects that you have configured. For both things enabled must set to "true".
 
-The filename is automatically generated
+The filename is automatically generated via:
+
 `filename="/tmp/db.$DN.$(date +"%d-%m-%y_%H.%M.%S").$((1 + $RANDOM % 100000)).sql.gz"`
-if the database_name is example, and you run this dumper the 01/05/2027 at 10:15:23 the resulting name will be
+
+If the database_name is example, and you run this dumper the 01/05/2027 at 10:15:23 the resulting name will be
 `db.example.2027-01-05_10.15.23.{random_number_between_1_and_100000}`
 
-This is the mysqldump command that will be run
-`mysqldump -h$DH -u$DU -p$DP $DN --single-transaction __add__purge__id__off__option__ | sed -e 's/DEFINER[ ]*=[ ]*[^*]*\*/\*/' | pv | gzip >"$filename"`
+The file will exist in the /tmp folder in the server so it gets cleaned up automatically and to not occupy unnecessary space in the server.
+
+This is the mysqldump command that will be run: `mysqldump -h$DH -u$DU -p$DP $DN --single-transaction __add__purge__id__off__option__ | sed -e 's/DEFINER[ ]*=[ ]*[^*]*\*/\*/' | pv | gzip >"$filename"`. If there is no purge option in the config, then `__add__purge__id__off__option__` will be empty. Otherwise, it will add `--set-gtid-purged=OFF`
