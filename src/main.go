@@ -13,13 +13,16 @@ import (
 )
 
 type Connection struct {
-    Remote_env_path            string `json:"remote_env_path"`
-    Ssh_host                   string `json:"ssh_host"`
-    Ssh_pass                   string `json:"ssh_pass"`
-    Enabled                    bool   `json:"enabled"`
-    Local_path                 string `json:"local_path"`
-    Enable_set_gtid_purged_off bool   `json:"enable_set_gtid_purged_off"`
-    Id                         string `json:"id"`
+    Remote_env_path            string   `json:"remote_env_path"`
+    Ssh_host                   string   `json:"ssh_host"`
+    Ssh_pass                   string   `json:"ssh_pass"`
+    Enabled                    bool     `json:"enabled"`
+    Local_path                 string   `json:"local_path"`
+    Enable_set_gtid_purged_off bool     `json:"enable_set_gtid_purged_off"`
+    Id                         string   `json:"id"`
+    Ignore_Tables              []string `json:"ignore_tables"`
+    With_Core_Config_Data      bool     `json:"with_core_config"`
+    Only_Core_Config_Data      bool     `json:"only_core_config"`
 }
 
 func main() {
@@ -83,6 +86,10 @@ func main() {
             item.Local_path = "./"
         }
 
+        if item.With_Core_Config_Data == true && item.Only_Core_Config_Data == false {
+            item.Ignore_Tables = append(item.Ignore_Tables, "core_config_data")
+        }
+
         filename, err := connectAndGenerateDump2(&item)
 
         if err != nil {
@@ -110,11 +117,30 @@ func connectAndGenerateDump2(item *Connection) (string, error) {
 
     // Print the command string
     // cmd := exec.Command("ssh", "-v", ssh_host, "whoami && pwd && echo $PATH")
-    var sent_db_dump_bash_script string
+    var sent_db_dump_bash_script = generate_db_dump_bash_script
     if item.Enable_set_gtid_purged_off {
-        sent_db_dump_bash_script = strings.ReplaceAll(generate_db_dump_bash_script, "__add__purge__id__off__option__", "--set-gtid-purged=OFF")
+        sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__add__purge__id__off__option__", "--set-gtid-purged=OFF")
     } else {
-        sent_db_dump_bash_script = strings.ReplaceAll(generate_db_dump_bash_script, "__add__purge__id__off__option__", "")
+        sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__add__purge__id__off__option__ ", "")
+    }
+
+    var tables_to_ignore []string
+    for _, table := range item.Ignore_Tables {
+        tables_to_ignore = append(tables_to_ignore, fmt.Sprintf("--ignore-table=$DN.%s ", table))
+    }
+
+    if item.Only_Core_Config_Data {
+        sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__only__core__config__", "core_config_data")
+        sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__name__", "core_config_data")
+    } else {
+        sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__only__core__config__ ", "")
+        sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, ".__name__", "")
+    }
+
+    if len(tables_to_ignore) > 0 {
+        sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__ignore__tables__", strings.Join(tables_to_ignore, " "))
+    } else {
+        sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__ignore__tables__ ", "")
     }
 
     cmd.Stdin = strings.NewReader(sent_db_dump_bash_script)
@@ -185,7 +211,7 @@ func scpFile(item *Connection, filename string) error {
     return nil
 }
 
-var generate_db_dump_bash_script = `
+const generate_db_dump_bash_script = `
 #!/bin/bash
 
 ENV_PHP_PATH=$1
@@ -202,8 +228,8 @@ DP="$(grep "[\']db[\']" -A 20 "$ENV_PHP_PATH" | grep "password" | head -n1 | sed
 
 #echo $DN $DH $DU $DP
 echo "Starting dump file generation"
-filename="/tmp/db.$DN.$(date +"%d-%m-%y_%H.%M.%S").$((1 + $RANDOM % 100000)).sql.gz"
-mysqldump -h$DH -u$DU -p$DP $DN --single-transaction __add__purge__id__off__option__ | sed -e 's/DEFINER[ ]*=[ ]*[^*]*\*/\*/' | gzip >"$filename"
+filename="/tmp/db.$DN.__name__.$(date +"%d-%m-%y_%H.%M.%S").$((1 + $RANDOM % 100000)).sql.gz"
+mysqldump -h$DH -u$DU -p$DP $DN --single-transaction __ignore__tables__ __add__purge__id__off__option__ __only__core__config__ | sed -e 's/DEFINER[ ]*=[ ]*[^*]*\*/\*/' | gzip >"$filename"
 echo "Finished dump file generation"
 echo "Generated filename: $filename"
 `
