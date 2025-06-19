@@ -23,6 +23,7 @@ type Connection struct {
     Ignore_Tables              []string `json:"ignore_tables"`
     With_Core_Config_Data      bool     `json:"with_core_config"`
     Only_Core_Config_Data      bool     `json:"only_core_config"`
+    Only_Tables                string   `json:"only_tables"`
 }
 
 func main() {
@@ -135,14 +136,28 @@ func connectAndGenerateDump2(item *Connection) (string, error) {
         sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, ".__name__", "")
 
         // Si Only_Tables está definido, usar solo esas tablas
-        if len(item.Only_Tables) > 0 {
-            var tables_only []string
-            for _, table := range item.Only_Tables {
-                tables_only = append(tables_only, table)
+        if item.Only_Tables != "" {
+            content, err := os.ReadFile(item.Only_Tables)
+            if err == nil {
+                lines := strings.Split(string(content), "\n")
+                var tables_only []string
+                for _, line := range lines {
+                    table := strings.TrimSpace(line)
+                    if table != "" {
+                        tables_only = append(tables_only, table)
+                    }
+                }
+
+                if len(tables_only) > 0 {
+                    sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__only__tables__", strings.Join(tables_only, " "))
+                    sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__ignore__tables__ ", "")
+                } else {
+                    sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__only__tables__ ", "")
+                }
+            } else {
+                fmt.Printf("Warning: could not read only_tables file '%s': %v\n", item.Only_Tables, err)
+                sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__only__tables__ ", "")
             }
-            sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__only__tables__", strings.Join(tables_only, " "))
-            // Cuando usamos only_tables, no usamos ignore_tables
-            sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__ignore__tables__ ", "")
         } else {
             var tables_to_ignore []string
             // Si no hay Only_Tables, usar Ignore_Tables si está definido
@@ -161,7 +176,8 @@ func connectAndGenerateDump2(item *Connection) (string, error) {
         }
     }
 
-    //fmt.Println(sent_db_dump_bash_script)
+    fmt.Println(sent_db_dump_bash_script)
+    //os.Exit(0)
 
     cmd.Stdin = strings.NewReader(sent_db_dump_bash_script)
     cmd.Args = append(cmd.Args, item.Remote_env_path)
@@ -237,17 +253,11 @@ const generate_db_dump_bash_script = `
 
 ENV_PHP_PATH=$1
 
-#echo "Current user: $(whoami)"
-#echo "Current directory: $(pwd)"
-#echo "PATH: $PATH"
-#echo $ENV_PHP_PATH
-
 DN="$(grep "[\']db[\']" -A 20 "$ENV_PHP_PATH" | grep "dbname" | head -n1 | sed "s/.*[=][>][ ]*[']//" | sed "s/['][,]//")"
 DH="$(grep "[\']db[\']" -A 20 "$ENV_PHP_PATH" | grep "host" | head -n1 | sed "s/.*[=][>][ ]*[']//" | sed "s/['][,]//")"
 DU="$(grep "[\']db[\']" -A 20 "$ENV_PHP_PATH" | grep "username" | head -n1 | sed "s/.*[=][>][ ]*[']//" | sed "s/['][,]//")"
 DP="$(grep "[\']db[\']" -A 20 "$ENV_PHP_PATH" | grep "password" | head -n1 | sed "s/.*[=][>][ ]*[']//" | sed "s/[']$//" | sed "s/['][,]//")"
 
-#echo $DN $DH $DU $DP
 echo "Starting dump file generation"
 filename="/tmp/db.$DN.__name__.$(date +"%d-%m-%y_%H.%M.%S").$((1 + $RANDOM % 100000)).sql.gz"
 mysqldump -h$DH -u$DU -p$DP $DN --single-transaction __ignore__tables__ __add__purge__id__off__option__ __only__core__config__ __only__tables__ | sed -e 's/DEFINER[ ]*=[ ]*[^*]*\*/\*/' | gzip >"$filename"
