@@ -124,24 +124,44 @@ func connectAndGenerateDump2(item *Connection) (string, error) {
         sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__add__purge__id__off__option__ ", "")
     }
 
-    var tables_to_ignore []string
-    for _, table := range item.Ignore_Tables {
-        tables_to_ignore = append(tables_to_ignore, fmt.Sprintf("--ignore-table=$DN.%s ", table))
-    }
-
+    // Handle core_config_data special case
     if item.Only_Core_Config_Data {
         sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__only__core__config__", "core_config_data")
         sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__name__", "core_config_data")
+        sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__ignore__tables__ ", "")
+        sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__only__tables__ ", "")
     } else {
         sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__only__core__config__ ", "")
         sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, ".__name__", "")
+
+        // Si Only_Tables está definido, usar solo esas tablas
+        if len(item.Only_Tables) > 0 {
+            var tables_only []string
+            for _, table := range item.Only_Tables {
+                tables_only = append(tables_only, table)
+            }
+            sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__only__tables__", strings.Join(tables_only, " "))
+            // Cuando usamos only_tables, no usamos ignore_tables
+            sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__ignore__tables__ ", "")
+        } else {
+            var tables_to_ignore []string
+            // Si no hay Only_Tables, usar Ignore_Tables si está definido
+            for _, table := range item.Ignore_Tables {
+                tables_to_ignore = append(tables_to_ignore, fmt.Sprintf("--ignore-table=$DN.%s", table))
+            }
+
+            if len(tables_to_ignore) > 0 {
+                sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__ignore__tables__", strings.Join(tables_to_ignore, " "))
+            } else {
+                sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__ignore__tables__ ", "")
+            }
+
+            // Limpiar only_tables placeholder
+            sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__only__tables__ ", "")
+        }
     }
 
-    if len(tables_to_ignore) > 0 {
-        sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__ignore__tables__", strings.Join(tables_to_ignore, " "))
-    } else {
-        sent_db_dump_bash_script = strings.ReplaceAll(sent_db_dump_bash_script, "__ignore__tables__ ", "")
-    }
+    //fmt.Println(sent_db_dump_bash_script)
 
     cmd.Stdin = strings.NewReader(sent_db_dump_bash_script)
     cmd.Args = append(cmd.Args, item.Remote_env_path)
@@ -150,6 +170,7 @@ func connectAndGenerateDump2(item *Connection) (string, error) {
     //fmt.Println("Environment Variables", cmd.Env)
     fmt.Println("Command to be executed:", cmd_string)
 
+    //os.Exit(0)
     // Create a buffer to capture stdout
     var stdout_buffer bytes.Buffer
     // Create a MultiWriter that writes to both os.Stdout and the buffer
@@ -229,7 +250,7 @@ DP="$(grep "[\']db[\']" -A 20 "$ENV_PHP_PATH" | grep "password" | head -n1 | sed
 #echo $DN $DH $DU $DP
 echo "Starting dump file generation"
 filename="/tmp/db.$DN.__name__.$(date +"%d-%m-%y_%H.%M.%S").$((1 + $RANDOM % 100000)).sql.gz"
-mysqldump -h$DH -u$DU -p$DP $DN --single-transaction __ignore__tables__ __add__purge__id__off__option__ __only__core__config__ | sed -e 's/DEFINER[ ]*=[ ]*[^*]*\*/\*/' | gzip >"$filename"
+mysqldump -h$DH -u$DU -p$DP $DN --single-transaction __ignore__tables__ __add__purge__id__off__option__ __only__core__config__ __only__tables__ | sed -e 's/DEFINER[ ]*=[ ]*[^*]*\*/\*/' | gzip >"$filename"
 echo "Finished dump file generation"
 echo "Generated filename: $filename"
 `
